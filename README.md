@@ -30,6 +30,31 @@ The process prints a short line when either participant starts or finishes:
 [2026-07-23T10:30:12.345Z] verifier finished in 12.3s (continue)
 ```
 
+Every prod includes the approximate time remaining so participants can converge
+without rounds. A response interrupted by the safety cap is reported as
+`aborted` in both the console and feed.
+
+## Follow it on Telegram
+
+Telegram output is optional. Create a bot with BotFather, add it to the target
+channel with permission to post, then provide its token and the channel ID:
+
+```bash
+TELEGRAM_BOT_TOKEN="..." \
+TELEGRAM_CHAT_ID="@channel_name" \
+bun run debate "Should we use an event log or a relational database?"
+```
+
+`TELEGRAM_CHAT_ID` may also be a numeric chat ID. The CLI sends a short run
+header, then creates a lightly formatted post for each participant activation.
+It edits that post at a throttled cadence while text arrives and flushes the
+final status when the activation completes. Long activations show their latest
+text in Telegram; the full stream remains in the local Markdown feed.
+
+Telegram delivery is kept outside the debate control path. A Bot API or
+permission error prints a warning, disables further Telegram output for that
+run, and lets the debate continue.
+
 ## Output
 
 Each run creates:

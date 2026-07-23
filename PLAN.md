@@ -16,6 +16,8 @@ after observing real runs. Run Pi as a library from a standalone Bun CLI.
 - Include role and feed instructions in each participant's system prompt.
 - Record rough timing in the feed entry written by the master.
 - Print a lightweight console line when a participant starts or finishes.
+- Optionally mirror streamed activations to Telegram through throttled edits.
+- Tell participants approximately how much wall-clock time remains in every prod.
 - Stop when both participants declare `V3_STATUS: DONE`, with a wall-clock safety
   cap.
 
@@ -33,4 +35,5 @@ after observing real runs. Run Pi as a library from a standalone Bun CLI.
 - Both sessions preserve their conversational context across prods.
 - Feed entries identify the participant and contain prompt, first-text, and
   completion timing.
+- Telegram failure does not interrupt the debate or replace the local feeds.
 - Consensus, timeout, failure, and process interruption dispose both sessions.

@@ -11,6 +11,10 @@ import {
   LiveFeedDebate,
 } from "./live-feed";
 import { createPiDebateAgents } from "./pi-agent";
+import {
+  TelegramProgressReporter,
+  telegramConfigFromEnv,
+} from "./telegram";
 
 type ThinkingLevel = NonNullable<CreateAgentSessionOptions["thinkingLevel"]>;
 
@@ -98,12 +102,14 @@ export function parseCliArguments(args: readonly string[]): CliArguments {
 export function progressLine(
   event: DebateProgressEvent,
   now = new Date(),
-): string {
+): string | undefined {
+  if (event.type === "participant_text") return undefined;
   const prefix = `[${now.toISOString()}] ${event.participant}`;
   if (event.type === "participant_started") {
     const cause = event.trigger === "initial" ? "initial" : "peer update";
     return `${prefix} started (${cause})`;
   }
+  if (event.aborted) return `${prefix} finished in ${formatSeconds(event.elapsedMs)} (aborted)`;
   const status = event.status?.toLowerCase() ?? "no status";
   return `${prefix} finished in ${formatSeconds(event.elapsedMs)} (${status})`;
 }
@@ -113,6 +119,15 @@ export async function runCli(
   cwd = process.cwd(),
 ): Promise<DebateRunResult> {
   const options = parseCliArguments(args);
+  const telegramConfig = telegramConfigFromEnv(process.env);
+  const telegram = telegramConfig === undefined
+    ? undefined
+    : new TelegramProgressReporter({
+        ...telegramConfig,
+        onWarning(message) {
+          console.error(message);
+        },
+      });
   const modelRuntime = await ModelRuntime.create();
   const model = modelRuntime.getModel(options.providerId, options.modelId);
   if (model === undefined) {
@@ -136,7 +151,9 @@ export async function runCli(
     verifier: agents.verifier,
     maxDurationMs: options.maxDurationMs,
     onProgress(event) {
-      console.log(progressLine(event));
+      const line = progressLine(event);
+      if (line !== undefined) console.log(line);
+      telegram?.handle(event);
     },
   });
   const interrupt = (): void => {
@@ -150,6 +167,11 @@ export async function runCli(
     options.thinkingLevel,
     runDirectory,
   ].join(" | "));
+  telegram?.startRun({
+    topic: options.topic,
+    model: `${options.providerId}/${options.modelId}`,
+    maxDurationMs: options.maxDurationMs,
+  });
   process.once("SIGINT", interrupt);
   try {
     const result = await debate.run();
@@ -162,6 +184,7 @@ export async function runCli(
     return result;
   } finally {
     process.removeListener("SIGINT", interrupt);
+    await telegram?.close();
   }
 }
 

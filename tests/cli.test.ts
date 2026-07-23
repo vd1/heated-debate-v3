@@ -55,8 +55,23 @@ describe("progressLine", () => {
       participant: "verifier",
       status: "CONTINUE",
       elapsedMs: 12_345,
+      aborted: false,
     }, timestamp)).toBe(
       "[2026-07-23T10:30:00.000Z] verifier finished in 12.3s (continue)",
     );
+    expect(progressLine({
+      type: "participant_completed",
+      participant: "proposer",
+      status: undefined,
+      elapsedMs: 9_000,
+      aborted: true,
+    }, timestamp)).toBe(
+      "[2026-07-23T10:30:00.000Z] proposer finished in 9.0s (aborted)",
+    );
+    expect(progressLine({
+      type: "participant_text",
+      participant: "proposer",
+      delta: "partial text",
+    }, timestamp)).toBeUndefined();
   });
 });

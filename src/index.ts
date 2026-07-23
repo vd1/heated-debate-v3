@@ -1,6 +1,5 @@
 export {
   LiveFeedDebate,
-  PEER_FEED_PROD,
   type DebateAgent,
   type DebateProgressEvent,
   type DebateRunResult,
@@ -22,3 +21,12 @@ export {
   runCli,
   type CliArguments,
 } from "./cli";
+export {
+  TelegramProgressReporter,
+  renderParticipantMessage,
+  telegramConfigFromEnv,
+  type TelegramConfig,
+  type TelegramFetch,
+  type TelegramProgressReporterOptions,
+  type TelegramRunInput,
+} from "./telegram";

@@ -34,10 +34,16 @@ export type DebateProgressEvent =
       trigger: "initial" | "peer_growth";
     }
   | {
+      type: "participant_text";
+      participant: ParticipantName;
+      delta: string;
+    }
+  | {
       type: "participant_completed";
       participant: ParticipantName;
       status: DebateStatus | undefined;
       elapsedMs: number;
+      aborted: boolean;
     };
 
 export interface DebateRunResult {
@@ -51,9 +57,6 @@ export interface DebateRunResult {
 
 const DEFAULT_POLL_INTERVAL_MS = 250;
 const DEFAULT_MAX_DURATION_MS = 5 * 60 * 1_000;
-
-export const PEER_FEED_PROD =
-  "The peer feed has grown. Pull it now and respond to the newest useful content.";
 
 interface ParticipantState {
   readonly name: ParticipantName;
@@ -78,6 +81,7 @@ export class LiveFeedDebate {
   private terminationReason: DebateTerminationReason | undefined;
   private failure: string | undefined;
   private abortPromise: Promise<void> | undefined;
+  private deadlineAtMs: number | undefined;
 
   constructor(input: LiveFeedDebateInput) {
     if (input.topic.trim().length === 0) throw new Error("topic is required");
@@ -118,19 +122,24 @@ export class LiveFeedDebate {
     if (this.hasRun) throw new Error("a live-feed debate can only run once");
     this.hasRun = true;
     const startedAtMs = Date.now();
+    this.deadlineAtMs = startedAtMs + this.maxDurationMs;
 
     try {
       await this.prepareFiles();
       await this.launch(
         this.proposer,
-        `Read ${join(this.runDirectory, "topic.md")} and begin the debate with a concrete proposal. Your response is streamed automatically to your feed.`,
+        [
+          approximateTimeRemaining(this.remainingMs()),
+          `Read ${join(this.runDirectory, "topic.md")} and begin the debate with a concrete proposal.`,
+          "Your response is streamed automatically to your feed. Converge as the deadline approaches.",
+        ].join(" "),
         "initial",
       );
 
       while (this.terminationReason === undefined) {
         await sleep(this.pollIntervalMs);
 
-        if (Date.now() - startedAtMs >= this.maxDurationMs) {
+        if (this.remainingMs() <= 0) {
           this.terminationReason = "max_duration";
           break;
         }
@@ -195,13 +204,23 @@ export class LiveFeedDebate {
 
     const active = state.agent.prompt(prompt, (delta) => {
       activation.appendText(delta);
+      if (delta.length > 0) {
+        this.emitProgress({
+          type: "participant_text",
+          participant: state.name,
+          delta,
+        });
+      }
     }).then(async () => {
-      state.latestStatus = await activation.complete();
+      const aborted = this.terminationReason !== undefined
+        && this.terminationReason !== "consensus";
+      state.latestStatus = await activation.complete(aborted);
       this.emitProgress({
         type: "participant_completed",
         participant: state.name,
         status: state.latestStatus,
         elapsedMs: Math.max(0, Date.now() - startedAtMs),
+        aborted,
       });
     }).catch(async (error: unknown) => {
       const message = errorMessage(error);
@@ -221,7 +240,12 @@ export class LiveFeedDebate {
     if (state.busy || this.terminationReason !== undefined) return;
     const currentBytes = await fileSize(state.peerFeedPath);
     if (currentBytes <= state.peerBytesAtLastPrompt) return;
-    await this.launch(state, PEER_FEED_PROD, "peer_growth");
+    await this.launch(state, [
+      "The peer feed has grown.",
+      approximateTimeRemaining(this.remainingMs()),
+      "Pull it now and respond to the newest useful content.",
+      "If no material issue remains, finish with V3_STATUS: DONE.",
+    ].join(" "), "peer_growth");
   }
 
   private hasConsensus(): boolean {
@@ -277,6 +301,10 @@ export class LiveFeedDebate {
       // Display callbacks must not affect the debate.
     }
   }
+
+  private remainingMs(): number {
+    return Math.max(0, (this.deadlineAtMs ?? Date.now()) - Date.now());
+  }
 }
 
 class FeedActivation {
@@ -299,13 +327,18 @@ class FeedActivation {
     this.enqueue(chunk);
   }
 
-  async complete(): Promise<DebateStatus | undefined> {
+  async complete(aborted: boolean): Promise<DebateStatus | undefined> {
     const completedAtMs = Date.now();
     if (this.firstTextAtMs === undefined) {
       this.firstTextAtMs = completedAtMs;
-      this.enqueue(`${this.header(completedAtMs)}[No visible assistant text.]`);
+      const message = aborted
+        ? "[Aborted before visible assistant text.]"
+        : "[No visible assistant text.]";
+      this.enqueue(`${this.header(completedAtMs)}${message}`);
     }
-    this.enqueue(this.completionFooter(completedAtMs));
+    this.enqueue(aborted
+      ? this.abortedFooter(completedAtMs)
+      : this.completionFooter(completedAtMs));
     await this.writes;
     return finalStatus(this.fullText);
   }
@@ -343,6 +376,15 @@ class FeedActivation {
     ].join("\n");
   }
 
+  private abortedFooter(abortedAtMs: number): string {
+    return [
+      "",
+      `<!-- aborted_at: ${new Date(abortedAtMs).toISOString()}; elapsed_ms: ${String(Math.max(0, abortedAtMs - this.promptedAtMs))} -->`,
+      "",
+      "",
+    ].join("\n");
+  }
+
   private enqueue(text: string): void {
     this.writes = this.writes.then(() => appendFile(this.feedPath, text, "utf8"));
   }
@@ -353,6 +395,11 @@ function finalStatus(text: string): DebateStatus | undefined {
   if (lastLine === "V3_STATUS: CONTINUE") return "CONTINUE";
   if (lastLine === "V3_STATUS: DONE") return "DONE";
   return undefined;
+}
+
+function approximateTimeRemaining(milliseconds: number): string {
+  const seconds = Math.max(1, Math.ceil(milliseconds / 1_000));
+  return `Approximately ${String(seconds)} ${seconds === 1 ? "second" : "seconds"} remain.`;
 }
 
 async function fileSize(path: string): Promise<number> {

@@ -173,6 +173,7 @@ describe("LiveFeedDebate", () => {
   test("reports lightweight participant progress", async () => {
     const runDirectory = await temporaryRunDirectory();
     const progress: string[] = [];
+    const streamedText: string[] = [];
     const proposer = new FakeAgent((_prompt, onText) => {
       onText("Proposed.\n\nV3_STATUS: DONE");
       return Promise.resolve();
@@ -190,6 +191,10 @@ describe("LiveFeedDebate", () => {
       pollIntervalMs: 2,
       maxDurationMs: 500,
       onProgress(event) {
+        if (event.type === "participant_text") {
+          streamedText.push(`${event.participant}:${event.delta}`);
+          return;
+        }
         progress.push([
           event.type,
           event.participant,
@@ -204,13 +209,43 @@ describe("LiveFeedDebate", () => {
       "participant_started:verifier:peer_growth",
       "participant_completed:verifier:DONE",
     ]);
+    expect(streamedText).toEqual([
+      "proposer:Proposed.\n\nV3_STATUS: DONE",
+      "verifier:Verified.\n\nV3_STATUS: DONE",
+    ]);
+  });
+
+  test("tells each participant approximately how much time remains", async () => {
+    const runDirectory = await temporaryRunDirectory();
+    const proposer = new FakeAgent((_prompt, onText) => {
+      onText("Proposed.\n\nV3_STATUS: DONE");
+      return Promise.resolve();
+    });
+    const verifier = new FakeAgent((_prompt, onText) => {
+      onText("Verified.\n\nV3_STATUS: DONE");
+      return Promise.resolve();
+    });
+
+    await new LiveFeedDebate({
+      runDirectory,
+      topic: "Converge on time.",
+      proposer,
+      verifier,
+      pollIntervalMs: 2,
+      maxDurationMs: 5_000,
+    }).run();
+
+    expect(proposer.prompts[0]).toContain("Approximately 5 seconds remain");
+    expect(verifier.prompts[0]).toContain("Approximately 5 seconds remain");
+    expect(verifier.prompts[0]).toContain(
+      "If no material issue remains, finish with V3_STATUS: DONE.",
+    );
   });
 
   test("aborts an active participant at the wall-clock limit", async () => {
     const runDirectory = await temporaryRunDirectory();
     const gate = new Gate();
-    const proposer = new FakeAgent(async (_prompt, onText) => {
-      onText("Still working");
+    const proposer = new FakeAgent(async () => {
       await gate.promise;
     }, () => {
       gate.open();
@@ -229,8 +264,9 @@ describe("LiveFeedDebate", () => {
     expect(result.reason).toBe("max_duration");
     expect(proposer.abortCalls).toBe(1);
     expect(proposer.disposeCalls).toBe(1);
-    expect(await readFile(join(runDirectory, "proposer.md"), "utf8"))
-      .toContain("termination: max_duration");
+    const feed = await readFile(join(runDirectory, "proposer.md"), "utf8");
+    expect(feed).toContain("[Aborted before visible assistant text.]");
+    expect(feed).toContain("termination: max_duration");
   });
 
   test("stops both sessions when one participant fails", async () => {
