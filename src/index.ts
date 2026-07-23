@@ -1,9 +1,8 @@
 export {
   LiveFeedDebate,
   PEER_FEED_PROD,
-  parseDebateCommand,
   type DebateAgent,
-  type DebateCommand,
+  type DebateProgressEvent,
   type DebateRunResult,
   type DebateTerminationReason,
   type LiveFeedDebateInput,
@@ -17,3 +16,9 @@ export {
   type CreatePiDebateAgentsInput,
   type PiDebateAgents,
 } from "./pi-agent";
+export {
+  parseCliArguments,
+  progressLine,
+  runCli,
+  type CliArguments,
+} from "./cli";

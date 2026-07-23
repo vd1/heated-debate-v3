@@ -3,24 +3,32 @@
 Heated Debate v3 runs a proposer and verifier as persistent Pi sessions over two
 growing Markdown feeds. There are no rounds. Each participant uses ordinary Pi
 tools to pull the other participant's feed and may react while a message is still
-streaming.
+streaming. Pi is used as a library by a standalone Bun process.
 
 ## Run it
 
-Install dependencies, start Pi in this repository, and invoke:
+Install dependencies and run:
 
-```text
-/debate3 Should we use an event log or a relational database?
+```bash
+bun run debate "Should we use an event log or a relational database?"
 ```
 
 The default safety cap is five minutes. Override it with:
 
-```text
-/debate3 --max-minutes 1.5 Compare approach A with approach B
+```bash
+bun run debate --max-minutes 1.5 "Compare approach A with approach B"
 ```
 
-The extension uses the host session's active model and thinking level for both
-participants.
+The default model is `openai-codex/gpt-5.6-sol` with thinking level `high`.
+Override either setting with `--model provider/model` or `--thinking LEVEL`.
+Both participants use the same selection.
+
+The process prints a short line when either participant starts or finishes:
+
+```text
+[2026-07-23T10:30:00.000Z] verifier started (peer update)
+[2026-07-23T10:30:12.345Z] verifier finished in 12.3s (continue)
+```
 
 ## Output
 
@@ -39,8 +47,8 @@ The feeds are the debate record.
 
 Each participant finishes a response with `V3_STATUS: CONTINUE` or
 `V3_STATUS: DONE`. The run stops when both latest completed responses say `DONE`,
-when the safety cap expires, when a participant fails, or when the host Pi
-session shuts down.
+when the safety cap expires, when a participant fails, or when the standalone
+process receives an interrupt.
 
 ## Development
 

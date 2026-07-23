@@ -5,6 +5,7 @@
   "type": "module",
   "packageManager": "bun@1.2.11",
   "scripts": {
+    "debate": "bun src/cli.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "lint": "eslint ."

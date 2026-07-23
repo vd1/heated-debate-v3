@@ -22,6 +22,7 @@ export interface CreatePiDebateAgentsInput {
   runDirectory: string;
   model: SelectedModel;
   thinkingLevel: SelectedThinkingLevel;
+  modelRuntime?: ModelRuntime;
 }
 
 export interface PiDebateAgents {
@@ -58,7 +59,7 @@ export class PiDebateAgent implements DebateAgent {
 export async function createPiDebateAgents(
   input: CreatePiDebateAgentsInput,
 ): Promise<PiDebateAgents> {
-  const modelRuntime = await ModelRuntime.create();
+  const modelRuntime = input.modelRuntime ?? await ModelRuntime.create();
   const proposerSession = await createParticipantSession({
     ...input,
     participant: "proposer",

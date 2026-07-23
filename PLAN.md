@@ -4,7 +4,7 @@
 
 Explore a continuous debate protocol built from persistent Pi sessions and
 append-only Markdown feeds. Keep the first implementation small enough to change
-after observing real runs.
+after observing real runs. Run Pi as a library from a standalone Bun CLI.
 
 ## Protocol
 
@@ -15,6 +15,7 @@ after observing real runs.
   message.
 - Include role and feed instructions in each participant's system prompt.
 - Record rough timing in the feed entry written by the master.
+- Print a lightweight console line when a participant starts or finishes.
 - Stop when both participants declare `V3_STATUS: DONE`, with a wall-clock safety
   cap.
 
@@ -32,4 +33,4 @@ after observing real runs.
 - Both sessions preserve their conversational context across prods.
 - Feed entries identify the participant and contain prompt, first-text, and
   completion timing.
-- Consensus, timeout, failure, and host shutdown dispose both sessions.
+- Consensus, timeout, failure, and process interruption dispose both sessions.

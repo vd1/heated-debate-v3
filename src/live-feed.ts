@@ -24,7 +24,21 @@ export interface LiveFeedDebateInput {
   verifier: DebateAgent;
   pollIntervalMs?: number;
   maxDurationMs?: number;
+  onProgress?: (event: DebateProgressEvent) => void;
 }
+
+export type DebateProgressEvent =
+  | {
+      type: "participant_started";
+      participant: ParticipantName;
+      trigger: "initial" | "peer_growth";
+    }
+  | {
+      type: "participant_completed";
+      participant: ParticipantName;
+      status: DebateStatus | undefined;
+      elapsedMs: number;
+    };
 
 export interface DebateRunResult {
   runDirectory: string;
@@ -33,11 +47,6 @@ export interface DebateRunResult {
   completedAt: string;
   elapsedMs: number;
   failure?: string;
-}
-
-export interface DebateCommand {
-  topic: string;
-  maxDurationMs: number;
 }
 
 const DEFAULT_POLL_INTERVAL_MS = 250;
@@ -62,6 +71,7 @@ export class LiveFeedDebate {
   private readonly topic: string;
   private readonly pollIntervalMs: number;
   private readonly maxDurationMs: number;
+  private readonly onProgress: ((event: DebateProgressEvent) => void) | undefined;
   private readonly proposer: ParticipantState;
   private readonly verifier: ParticipantState;
   private hasRun = false;
@@ -81,6 +91,7 @@ export class LiveFeedDebate {
     );
     this.runDirectory = input.runDirectory;
     this.topic = input.topic.trim();
+    this.onProgress = input.onProgress;
     this.proposer = {
       name: "proposer",
       agent: input.proposer,
@@ -113,6 +124,7 @@ export class LiveFeedDebate {
       await this.launch(
         this.proposer,
         `Read ${join(this.runDirectory, "topic.md")} and begin the debate with a concrete proposal. Your response is streamed automatically to your feed.`,
+        "initial",
       );
 
       while (this.terminationReason === undefined) {
@@ -165,16 +177,32 @@ export class LiveFeedDebate {
     ]);
   }
 
-  private async launch(state: ParticipantState, prompt: string): Promise<void> {
+  private async launch(
+    state: ParticipantState,
+    prompt: string,
+    trigger: "initial" | "peer_growth",
+  ): Promise<void> {
     if (state.busy || this.terminationReason !== undefined) return;
     state.peerBytesAtLastPrompt = await fileSize(state.peerFeedPath);
     state.busy = true;
+    const startedAtMs = Date.now();
+    this.emitProgress({
+      type: "participant_started",
+      participant: state.name,
+      trigger,
+    });
     const activation = new FeedActivation(state.name, state.feedPath);
 
     const active = state.agent.prompt(prompt, (delta) => {
       activation.appendText(delta);
     }).then(async () => {
       state.latestStatus = await activation.complete();
+      this.emitProgress({
+        type: "participant_completed",
+        participant: state.name,
+        status: state.latestStatus,
+        elapsedMs: Math.max(0, Date.now() - startedAtMs),
+      });
     }).catch(async (error: unknown) => {
       const message = errorMessage(error);
       await activation.fail(message);
@@ -193,7 +221,7 @@ export class LiveFeedDebate {
     if (state.busy || this.terminationReason !== undefined) return;
     const currentBytes = await fileSize(state.peerFeedPath);
     if (currentBytes <= state.peerBytesAtLastPrompt) return;
-    await this.launch(state, PEER_FEED_PROD);
+    await this.launch(state, PEER_FEED_PROD, "peer_growth");
   }
 
   private hasConsensus(): boolean {
@@ -240,6 +268,14 @@ export class LiveFeedDebate {
       appendFile(this.proposer.feedPath, marker, "utf8"),
       appendFile(this.verifier.feedPath, marker, "utf8"),
     ]);
+  }
+
+  private emitProgress(event: DebateProgressEvent): void {
+    try {
+      this.onProgress?.(event);
+    } catch {
+      // Display callbacks must not affect the debate.
+    }
   }
 }
 
@@ -310,23 +346,6 @@ class FeedActivation {
   private enqueue(text: string): void {
     this.writes = this.writes.then(() => appendFile(this.feedPath, text, "utf8"));
   }
-}
-
-export function parseDebateCommand(input: string): DebateCommand {
-  const trimmed = input.trim();
-  if (trimmed.length === 0) throw new Error("topic is required");
-  if (!trimmed.startsWith("--max-minutes")) {
-    return { topic: trimmed, maxDurationMs: DEFAULT_MAX_DURATION_MS };
-  }
-
-  const match = /^--max-minutes\s+(\S+)(?:\s+([\s\S]+))?$/u.exec(trimmed);
-  const minutes = Number(match?.[1]);
-  if (!Number.isFinite(minutes) || minutes <= 0) {
-    throw new Error("max minutes must be a positive number");
-  }
-  const topic = match?.[2]?.trim() ?? "";
-  if (topic.length === 0) throw new Error("topic is required");
-  return { topic, maxDurationMs: minutes * 60 * 1_000 };
 }
 
 function finalStatus(text: string): DebateStatus | undefined {

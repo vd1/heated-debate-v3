@@ -5,7 +5,6 @@ import { join } from "node:path";
 
 import {
   LiveFeedDebate,
-  parseDebateCommand,
   type DebateAgent,
   type TextDeltaHandler,
 } from "../src/live-feed";
@@ -171,6 +170,42 @@ describe("LiveFeedDebate", () => {
     expect(feed).toMatch(/completed_at: .*; elapsed_ms: \d+/);
   });
 
+  test("reports lightweight participant progress", async () => {
+    const runDirectory = await temporaryRunDirectory();
+    const progress: string[] = [];
+    const proposer = new FakeAgent((_prompt, onText) => {
+      onText("Proposed.\n\nV3_STATUS: DONE");
+      return Promise.resolve();
+    });
+    const verifier = new FakeAgent((_prompt, onText) => {
+      onText("Verified.\n\nV3_STATUS: DONE");
+      return Promise.resolve();
+    });
+
+    await new LiveFeedDebate({
+      runDirectory,
+      topic: "Show progress.",
+      proposer,
+      verifier,
+      pollIntervalMs: 2,
+      maxDurationMs: 500,
+      onProgress(event) {
+        progress.push([
+          event.type,
+          event.participant,
+          "trigger" in event ? event.trigger : event.status,
+        ].join(":"));
+      },
+    }).run();
+
+    expect(progress).toEqual([
+      "participant_started:proposer:initial",
+      "participant_completed:proposer:DONE",
+      "participant_started:verifier:peer_growth",
+      "participant_completed:verifier:DONE",
+    ]);
+  });
+
   test("aborts an active participant at the wall-clock limit", async () => {
     const runDirectory = await temporaryRunDirectory();
     const gate = new Gate();
@@ -218,28 +253,5 @@ describe("LiveFeedDebate", () => {
     expect(verifier.disposeCalls).toBe(1);
     expect(await readFile(join(runDirectory, "proposer.md"), "utf8"))
       .toContain("failed: provider unavailable");
-  });
-});
-
-describe("parseDebateCommand", () => {
-  test("uses a five-minute default and preserves the free-form topic", () => {
-    expect(parseDebateCommand("Should agents use a live feed?")).toEqual({
-      topic: "Should agents use a live feed?",
-      maxDurationMs: 300_000,
-    });
-  });
-
-  test("accepts an explicit positive minute cap", () => {
-    expect(parseDebateCommand("--max-minutes 1.5 Compare A and B")).toEqual({
-      topic: "Compare A and B",
-      maxDurationMs: 90_000,
-    });
-  });
-
-  test("rejects missing topics and invalid durations", () => {
-    expect(() => parseDebateCommand("")).toThrow("topic is required");
-    expect(() => parseDebateCommand("--max-minutes 0 Topic")).toThrow(
-      "max minutes must be a positive number",
-    );
   });
 });
