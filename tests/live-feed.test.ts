@@ -170,6 +170,39 @@ describe("LiveFeedDebate", () => {
     expect(feed).toMatch(/completed_at: .*; elapsed_ms: \d+/);
   });
 
+  test("records the explicitly selected context paths", async () => {
+    const runDirectory = await temporaryRunDirectory();
+    const proposer = new FakeAgent((_prompt, onText) => {
+      onText("Proposed.\n\nV3_STATUS: DONE");
+      return Promise.resolve();
+    });
+    const verifier = new FakeAgent((_prompt, onText) => {
+      onText("Verified.\n\nV3_STATUS: DONE");
+      return Promise.resolve();
+    });
+
+    await new LiveFeedDebate({
+      runDirectory,
+      topic: "Use the supplied evidence.",
+      contextPaths: [
+        "/research/notes.md",
+        "/research/paper.pdf",
+      ],
+      proposer,
+      verifier,
+      pollIntervalMs: 2,
+      maxDurationMs: 500,
+    }).run();
+
+    expect(await readFile(join(runDirectory, "context.md"), "utf8")).toBe([
+      "# Context",
+      "",
+      "- `/research/notes.md`",
+      "- `/research/paper.pdf`",
+      "",
+    ].join("\n"));
+  });
+
   test("reports lightweight participant progress", async () => {
     const runDirectory = await temporaryRunDirectory();
     const progress: string[] = [];

@@ -10,14 +10,17 @@ describe("parseCliArguments", () => {
       providerId: "openai-codex",
       modelId: "gpt-5.6-sol",
       thinkingLevel: "high",
+      contextPaths: [],
     });
   });
 
-  test("accepts model, thinking, and duration overrides", () => {
+  test("accepts model, thinking, duration, and context overrides", () => {
     expect(parseCliArguments([
       "--model", "anthropic/claude-sonnet-4-5",
       "--thinking", "medium",
       "--max-minutes", "1.5",
+      "--context", "notes/constraints.md",
+      "--context", "papers/result.pdf",
       "Compare A and B",
     ])).toEqual({
       topic: "Compare A and B",
@@ -25,6 +28,10 @@ describe("parseCliArguments", () => {
       providerId: "anthropic",
       modelId: "claude-sonnet-4-5",
       thinkingLevel: "medium",
+      contextPaths: [
+        "notes/constraints.md",
+        "papers/result.pdf",
+      ],
     });
   });
 
@@ -34,6 +41,8 @@ describe("parseCliArguments", () => {
       .toThrow("model must use provider/model");
     expect(() => parseCliArguments(["--thinking", "extreme", "Topic"]))
       .toThrow("unsupported thinking level");
+    expect(() => parseCliArguments(["--context", "--thinking", "Topic"]))
+      .toThrow("--context requires a value");
     expect(() => parseCliArguments(["--wat", "Topic"]))
       .toThrow("unknown option: --wat");
   });

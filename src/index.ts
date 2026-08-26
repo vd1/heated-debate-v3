@@ -9,6 +9,10 @@ export {
   type TextDeltaHandler,
 } from "./live-feed";
 export {
+  contextManifest,
+  resolveContextPaths,
+} from "./context";
+export {
   PiDebateAgent,
   createPiDebateAgents,
   participantProtocolPrompt,
@@ -30,3 +34,10 @@ export {
   type TelegramProgressReporterOptions,
   type TelegramRunInput,
 } from "./telegram";
+export {
+  createTavilyWebSearchTool,
+  tavilyConfigFromEnv,
+  type TavilyConfig,
+  type TavilyWebSearchOptions,
+  type WebSearchFetch,
+} from "./web-search";

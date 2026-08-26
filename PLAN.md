@@ -14,6 +14,8 @@ after observing real runs. Run Pi as a library from a standalone Bun CLI.
 - Prod an idle participant when the peer feed grows, including during a partial
   message.
 - Include role and feed instructions in each participant's system prompt.
+- Give both participants the same explicit list of user-selected context paths.
+- Optionally expose source-linked live web search for factual verification.
 - Record rough timing in the feed entry written by the master.
 - Print a lightweight console line when a participant starts or finishes.
 - Optionally mirror streamed activations to Telegram through throttled edits.
@@ -35,5 +37,9 @@ after observing real runs. Run Pi as a library from a standalone Bun CLI.
 - Both sessions preserve their conversational context across prods.
 - Feed entries identify the participant and contain prompt, first-text, and
   completion timing.
+- The run records its selected context paths, and missing paths fail before model
+  startup.
+- Web search is absent without configuration and requires visible source URLs
+  when available.
 - Telegram failure does not interrupt the debate or replace the local feeds.
 - Consensus, timeout, failure, and process interruption dispose both sessions.

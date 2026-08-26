@@ -23,6 +23,20 @@ The default model is `openai-codex/gpt-5.6-sol` with thinking level `high`.
 Override either setting with `--model provider/model` or `--thinking LEVEL`.
 Both participants use the same selection.
 
+Attach source material with repeatable `--context` options:
+
+```bash
+bun run debate \
+  --context notes/constraints.md \
+  --context papers/result.pdf \
+  "Does the evidence support the proposed mechanism?"
+```
+
+Relative context paths are resolved from the directory where the command runs.
+The CLI checks each path before starting the model, gives the same source list
+to both participants, and records the selection in the run directory. Agents
+use their ordinary Pi read or shell tools as appropriate for each source format.
+
 The process prints a short line when either participant starts or finishes:
 
 ```text
@@ -48,12 +62,28 @@ bun run debate "Should we use an event log or a relational database?"
 `TELEGRAM_CHAT_ID` may also be a numeric chat ID. The CLI sends a short run
 header, then creates a lightly formatted post for each participant activation.
 It edits that post at a throttled cadence while text arrives and flushes the
-final status when the activation completes. Long activations show their latest
-text in Telegram; the full stream remains in the local Markdown feed.
+final status when the activation completes. Blue rightward headers identify the
+proposer; orange leftward headers identify the verifier. Long activations show
+their latest text in Telegram; the full stream remains in the local Markdown
+feed.
 
 Telegram delivery is kept outside the debate control path. A Bot API or
 permission error prints a warning, disables further Telegram output for that
 run, and lets the debate continue.
+
+## Live web verification
+
+Web search is optional. Add a Tavily API key to `.env.local`:
+
+```dotenv
+TAVILY_API_KEY=tvly-your-key
+```
+
+When configured, each participant receives a `web_search` tool that returns
+source titles, URLs, and excerpts. Their protocol asks them to use it for
+current, uncertain, or disputed claims and to cite the returned URLs in visible
+debate text. Without the key, web search is omitted and the debate continues
+with its normal Pi tools.
 
 ## Output
 
@@ -62,13 +92,15 @@ Each run creates:
 ```text
 runs/run-XXXXXX/
   topic.md
+  context.md
   proposer.md
   verifier.md
 ```
 
 The master appends visible assistant text to the appropriate feed as Pi emits
 text deltas. Feed entries contain rough prompt, first-text, and completion timing.
-The feeds are the debate record.
+The context manifest records the user-selected source paths. The feeds are the
+debate record.
 
 Each participant finishes a response with `V3_STATUS: CONTINUE` or
 `V3_STATUS: DONE`. The run stops when both latest completed responses say `DONE`,

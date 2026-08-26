@@ -1,6 +1,7 @@
 import {
   type AgentSession,
   type CreateAgentSessionOptions,
+  type ToolDefinition,
   createAgentSession,
   DefaultResourceLoader,
   getAgentDir,
@@ -22,6 +23,9 @@ export interface CreatePiDebateAgentsInput {
   runDirectory: string;
   model: SelectedModel;
   thinkingLevel: SelectedThinkingLevel;
+  contextPaths?: readonly string[];
+  customTools?: ToolDefinition[];
+  webSearchAvailable?: boolean;
   modelRuntime?: ModelRuntime;
 }
 
@@ -87,6 +91,8 @@ export async function createPiDebateAgents(
 export function participantProtocolPrompt(input: {
   participant: ParticipantName;
   peerFeedPath: string;
+  contextPaths?: readonly string[];
+  webSearchAvailable?: boolean;
 }): string {
   const role = input.participant === "proposer"
     ? [
@@ -97,10 +103,28 @@ export function participantProtocolPrompt(input: {
         "Stress-test the proposal, find unsupported claims and missing constraints, and propose repairs.",
         "Say DONE only when the remaining proposal is adequate.",
       ];
+  const context = input.contextPaths?.length
+    ? [
+        "",
+        "User-selected context sources:",
+        ...input.contextPaths.map((path) => `- ${path}`),
+        "- Read the relevant sources before making claims they can settle.",
+      ]
+    : [];
+  const webSearch = input.webSearchAvailable === true
+    ? [
+        "",
+        "Live verification:",
+        "- The web_search tool is available for current, uncertain, or disputed factual claims.",
+        "- Cite source URLs in visible responses so the peer and reader can inspect the evidence.",
+      ]
+    : [];
 
   return [
     `You are the ${input.participant} in a continuous, asynchronous debate.`,
     ...role,
+    ...context,
+    ...webSearch,
     "",
     "Protocol:",
     `- On every prod, use your ordinary tools to read the peer feed at ${input.peerFeedPath}.`,
@@ -136,6 +160,9 @@ async function createParticipantSession(input: CreatePiDebateAgentsInput & {
     modelRuntime: input.modelRuntime,
     resourceLoader,
     sessionManager: SessionManager.inMemory(input.cwd),
+    ...(input.customTools === undefined
+      ? {}
+      : { customTools: input.customTools }),
   });
   return session;
 }

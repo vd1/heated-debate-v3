@@ -5,6 +5,7 @@ import {
 import { mkdir, mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 
+import { resolveContextPaths } from "./context";
 import {
   type DebateProgressEvent,
   type DebateRunResult,
@@ -15,6 +16,10 @@ import {
   TelegramProgressReporter,
   telegramConfigFromEnv,
 } from "./telegram";
+import {
+  createTavilyWebSearchTool,
+  tavilyConfigFromEnv,
+} from "./web-search";
 
 type ThinkingLevel = NonNullable<CreateAgentSessionOptions["thinkingLevel"]>;
 
@@ -24,6 +29,7 @@ export interface CliArguments {
   providerId: string;
   modelId: string;
   thinkingLevel: ThinkingLevel;
+  contextPaths: string[];
 }
 
 const DEFAULT_MAX_DURATION_MS = 5 * 60 * 1_000;
@@ -45,6 +51,7 @@ export function parseCliArguments(args: readonly string[]): CliArguments {
   let providerId = DEFAULT_PROVIDER_ID;
   let modelId = DEFAULT_MODEL_ID;
   let thinkingLevel = DEFAULT_THINKING_LEVEL;
+  const contextPaths: string[] = [];
   const topicParts: string[] = [];
 
   for (let index = 0; index < args.length; index += 1) {
@@ -82,6 +89,11 @@ export function parseCliArguments(args: readonly string[]): CliArguments {
       index += 1;
       continue;
     }
+    if (argument === "--context") {
+      contextPaths.push(requiredOptionValue(args, index, argument));
+      index += 1;
+      continue;
+    }
     if (argument?.startsWith("--") === true) {
       throw new Error(`unknown option: ${argument}`);
     }
@@ -96,6 +108,7 @@ export function parseCliArguments(args: readonly string[]): CliArguments {
     providerId,
     modelId,
     thinkingLevel,
+    contextPaths,
   };
 }
 
@@ -119,7 +132,12 @@ export async function runCli(
   cwd = process.cwd(),
 ): Promise<DebateRunResult> {
   const options = parseCliArguments(args);
+  const contextPaths = await resolveContextPaths(options.contextPaths, cwd);
   const telegramConfig = telegramConfigFromEnv(process.env);
+  const tavilyConfig = tavilyConfigFromEnv(process.env);
+  const webSearchTool = tavilyConfig === undefined
+    ? undefined
+    : createTavilyWebSearchTool(tavilyConfig);
   const telegram = telegramConfig === undefined
     ? undefined
     : new TelegramProgressReporter({
@@ -142,11 +160,19 @@ export async function runCli(
     runDirectory,
     model,
     thinkingLevel: options.thinkingLevel,
+    contextPaths,
     modelRuntime,
+    ...(webSearchTool === undefined
+      ? {}
+      : {
+          customTools: [webSearchTool],
+          webSearchAvailable: true,
+        }),
   });
   const debate = new LiveFeedDebate({
     runDirectory,
     topic: options.topic,
+    contextPaths,
     proposer: agents.proposer,
     verifier: agents.verifier,
     maxDurationMs: options.maxDurationMs,
@@ -165,6 +191,8 @@ export async function runCli(
     `[${new Date().toISOString()}] debate started`,
     `${options.providerId}/${options.modelId}`,
     options.thinkingLevel,
+    `${String(contextPaths.length)} context sources`,
+    `web search ${webSearchTool === undefined ? "disabled" : "enabled"}`,
     runDirectory,
   ].join(" | "));
   telegram?.startRun({
@@ -215,7 +243,7 @@ if (import.meta.main) {
   } catch (error) {
     console.error(`debate3 failed: ${errorMessage(error)}`);
     console.error(
-      "Usage: bun run debate [--max-minutes N] [--model provider/model] [--thinking LEVEL] <topic>",
+      "Usage: bun run debate [--max-minutes N] [--model provider/model] [--thinking LEVEL] [--context PATH]... <topic>",
     );
     process.exitCode = 1;
   }

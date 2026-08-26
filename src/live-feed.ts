@@ -1,6 +1,8 @@
 import { appendFile, mkdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { contextManifest } from "./context";
+
 export type ParticipantName = "proposer" | "verifier";
 export type DebateStatus = "CONTINUE" | "DONE";
 export type DebateTerminationReason =
@@ -20,6 +22,7 @@ export interface DebateAgent {
 export interface LiveFeedDebateInput {
   runDirectory: string;
   topic: string;
+  contextPaths?: readonly string[];
   proposer: DebateAgent;
   verifier: DebateAgent;
   pollIntervalMs?: number;
@@ -72,6 +75,7 @@ interface ParticipantState {
 export class LiveFeedDebate {
   private readonly runDirectory: string;
   private readonly topic: string;
+  private readonly contextPaths: readonly string[];
   private readonly pollIntervalMs: number;
   private readonly maxDurationMs: number;
   private readonly onProgress: ((event: DebateProgressEvent) => void) | undefined;
@@ -95,6 +99,7 @@ export class LiveFeedDebate {
     );
     this.runDirectory = input.runDirectory;
     this.topic = input.topic.trim();
+    this.contextPaths = input.contextPaths ?? [];
     this.onProgress = input.onProgress;
     this.proposer = {
       name: "proposer",
@@ -181,6 +186,11 @@ export class LiveFeedDebate {
     await mkdir(this.runDirectory, { recursive: true });
     await Promise.all([
       writeFile(join(this.runDirectory, "topic.md"), `${this.topic}\n`, "utf8"),
+      writeFile(
+        join(this.runDirectory, "context.md"),
+        contextManifest(this.contextPaths),
+        "utf8",
+      ),
       writeFile(this.proposer.feedPath, "", "utf8"),
       writeFile(this.verifier.feedPath, "", "utf8"),
     ]);

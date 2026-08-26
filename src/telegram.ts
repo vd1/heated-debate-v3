@@ -84,8 +84,11 @@ export function renderParticipantMessage(
     input.text.length === 0 ? "[Waiting for assistant text.]" : input.text,
     MAX_BODY_CODEPOINTS,
   );
+  const role = input.participant === "proposer"
+    ? "🟦 <b>PROPOSER →</b>"
+    : "<b>← VERIFIER</b> 🟧";
   return [
-    `<b>${input.participant.toUpperCase()}</b> · <i>${state}</i>`,
+    `${role} · <i>${state}</i>`,
     `<blockquote>${escapeHtml(body)}</blockquote>`,
   ].join("\n");
 }

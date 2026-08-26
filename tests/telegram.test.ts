@@ -31,8 +31,21 @@ describe("renderParticipantMessage", () => {
       elapsedMs: 2_500,
       aborted: false,
     })).toBe([
-      "<b>PROPOSER</b> · <i>continue · 2.5s</i>",
+      "🟦 <b>PROPOSER →</b> · <i>continue · 2.5s</i>",
       "<blockquote>Use A &lt; B &amp; keep checking.</blockquote>",
+    ].join("\n"));
+  });
+
+  test("gives the roles opposing visual identities", () => {
+    expect(renderParticipantMessage({
+      participant: "verifier",
+      text: "Check the edge case.",
+      status: undefined,
+      elapsedMs: undefined,
+      aborted: false,
+    })).toBe([
+      "<b>← VERIFIER</b> 🟧 · <i>streaming</i>",
+      "<blockquote>Check the edge case.</blockquote>",
     ].join("\n"));
   });
 
@@ -117,7 +130,7 @@ describe("TelegramProgressReporter", () => {
       message_id: 42,
       parse_mode: "HTML",
       text: [
-        "<b>PROPOSER</b> · <i>done · 1.2s</i>",
+        "🟦 <b>PROPOSER →</b> · <i>done · 1.2s</i>",
         "<blockquote>Draft &lt;one&gt; is ready.</blockquote>",
       ].join("\n"),
     });
