@@ -1,14 +1,16 @@
 import { describe, expect, test } from "bun:test";
 
-import { parseCliArguments, progressLine } from "../src/cli";
+import { modelLabel, parseCliArguments, progressLine } from "../src/cli";
 
 describe("parseCliArguments", () => {
   test("uses the standalone defaults", () => {
     expect(parseCliArguments(["Compare", "live", "feeds"])).toEqual({
       topic: "Compare live feeds",
       maxDurationMs: 300_000,
-      providerId: "openai-codex",
-      modelId: "gpt-5.6-sol",
+      models: {
+        proposer: { providerId: "openai-codex", modelId: "gpt-5.6-sol" },
+        verifier: { providerId: "openai-codex", modelId: "gpt-5.6-sol" },
+      },
       thinkingLevel: "high",
       contextPaths: [],
     });
@@ -25,8 +27,10 @@ describe("parseCliArguments", () => {
     ])).toEqual({
       topic: "Compare A and B",
       maxDurationMs: 90_000,
-      providerId: "anthropic",
-      modelId: "claude-sonnet-4-5",
+      models: {
+        proposer: { providerId: "anthropic", modelId: "claude-sonnet-4-5" },
+        verifier: { providerId: "anthropic", modelId: "claude-sonnet-4-5" },
+      },
       thinkingLevel: "medium",
       contextPaths: [
         "notes/constraints.md",
@@ -35,9 +39,28 @@ describe("parseCliArguments", () => {
     });
   });
 
+  test("lets each participant use its own model", () => {
+    const parsed = parseCliArguments([
+      "--verifier-model", "anthropic/claude-opus-5",
+      "--model", "openai-codex/gpt-6-astra",
+      "Topic",
+    ]);
+    expect(parsed.models).toEqual({
+      proposer: { providerId: "openai-codex", modelId: "gpt-6-astra" },
+      verifier: { providerId: "anthropic", modelId: "claude-opus-5" },
+    });
+    expect(modelLabel(parsed.models)).toBe(
+      "proposer openai-codex/gpt-6-astra vs verifier anthropic/claude-opus-5",
+    );
+    expect(modelLabel(parseCliArguments(["Topic"]).models))
+      .toBe("openai-codex/gpt-5.6-sol");
+  });
+
   test("rejects missing topics and malformed options", () => {
     expect(() => parseCliArguments([])).toThrow("topic is required");
     expect(() => parseCliArguments(["--model", "missing-slash", "Topic"]))
+      .toThrow("model must use provider/model");
+    expect(() => parseCliArguments(["--proposer-model", "anthropic/", "Topic"]))
       .toThrow("model must use provider/model");
     expect(() => parseCliArguments(["--thinking", "extreme", "Topic"]))
       .toThrow("unsupported thinking level");

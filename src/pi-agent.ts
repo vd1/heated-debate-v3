@@ -21,7 +21,7 @@ type SelectedThinkingLevel = NonNullable<CreateAgentSessionOptions["thinkingLeve
 export interface CreatePiDebateAgentsInput {
   cwd: string;
   runDirectory: string;
-  model: SelectedModel;
+  models: Readonly<Record<ParticipantName, SelectedModel>>;
   thinkingLevel: SelectedThinkingLevel;
   contextPaths?: readonly string[];
   customTools?: ToolDefinition[];
@@ -155,7 +155,7 @@ async function createParticipantSession(input: CreatePiDebateAgentsInput & {
 
   const { session } = await createAgentSession({
     cwd: input.cwd,
-    model: input.model,
+    model: input.models[input.participant],
     thinkingLevel: input.thinkingLevel,
     modelRuntime: input.modelRuntime,
     resourceLoader,

@@ -21,7 +21,17 @@ bun run debate --max-minutes 1.5 "Compare approach A with approach B"
 
 The default model is `openai-codex/gpt-5.6-sol` with thinking level `high`.
 Override either setting with `--model provider/model` or `--thinking LEVEL`.
-Both participants use the same selection.
+Both participants use the same selection unless `--proposer-model` or
+`--verifier-model` gives one of them its own model:
+
+```bash
+bun run debate \
+  --proposer-model openai-codex/gpt-6-astra \
+  --verifier-model anthropic/claude-opus-5-5 \
+  "Compare approach A with approach B"
+```
+
+The thinking level applies to both participants.
 
 Attach source material with repeatable `--context` options:
 

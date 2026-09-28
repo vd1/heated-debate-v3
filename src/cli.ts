@@ -10,6 +10,7 @@ import {
   type DebateProgressEvent,
   type DebateRunResult,
   LiveFeedDebate,
+  type ParticipantName,
 } from "./live-feed";
 import { createPiDebateAgents } from "./pi-agent";
 import {
@@ -23,11 +24,15 @@ import {
 
 type ThinkingLevel = NonNullable<CreateAgentSessionOptions["thinkingLevel"]>;
 
+export interface ModelChoice {
+  providerId: string;
+  modelId: string;
+}
+
 export interface CliArguments {
   topic: string;
   maxDurationMs: number;
-  providerId: string;
-  modelId: string;
+  models: Record<ParticipantName, ModelChoice>;
   thinkingLevel: ThinkingLevel;
   contextPaths: string[];
 }
@@ -48,8 +53,11 @@ const THINKING_LEVELS = new Set<ThinkingLevel>([
 
 export function parseCliArguments(args: readonly string[]): CliArguments {
   let maxDurationMs = DEFAULT_MAX_DURATION_MS;
-  let providerId = DEFAULT_PROVIDER_ID;
-  let modelId = DEFAULT_MODEL_ID;
+  let sharedModel: ModelChoice = {
+    providerId: DEFAULT_PROVIDER_ID,
+    modelId: DEFAULT_MODEL_ID,
+  };
+  const roleModels: Partial<Record<ParticipantName, ModelChoice>> = {};
   let thinkingLevel = DEFAULT_THINKING_LEVEL;
   const contextPaths: string[] = [];
   const topicParts: string[] = [];
@@ -70,13 +78,15 @@ export function parseCliArguments(args: readonly string[]): CliArguments {
       continue;
     }
     if (argument === "--model") {
-      const model = requiredOptionValue(args, index, argument);
-      const separator = model.indexOf("/");
-      if (separator <= 0 || separator === model.length - 1) {
-        throw new Error("model must use provider/model");
-      }
-      providerId = model.slice(0, separator);
-      modelId = model.slice(separator + 1);
+      sharedModel = parseModelChoice(requiredOptionValue(args, index, argument));
+      index += 1;
+      continue;
+    }
+    if (argument === "--proposer-model" || argument === "--verifier-model") {
+      const participant = argument === "--proposer-model" ? "proposer" : "verifier";
+      roleModels[participant] = parseModelChoice(
+        requiredOptionValue(args, index, argument),
+      );
       index += 1;
       continue;
     }
@@ -105,11 +115,32 @@ export function parseCliArguments(args: readonly string[]): CliArguments {
   return {
     topic,
     maxDurationMs,
-    providerId,
-    modelId,
+    models: {
+      proposer: roleModels.proposer ?? sharedModel,
+      verifier: roleModels.verifier ?? sharedModel,
+    },
     thinkingLevel,
     contextPaths,
   };
+}
+
+function parseModelChoice(model: string): ModelChoice {
+  const separator = model.indexOf("/");
+  if (separator <= 0 || separator === model.length - 1) {
+    throw new Error("model must use provider/model");
+  }
+  return {
+    providerId: model.slice(0, separator),
+    modelId: model.slice(separator + 1),
+  };
+}
+
+export function modelLabel(models: Record<ParticipantName, ModelChoice>): string {
+  const proposer = `${models.proposer.providerId}/${models.proposer.modelId}`;
+  const verifier = `${models.verifier.providerId}/${models.verifier.modelId}`;
+  return proposer === verifier
+    ? proposer
+    : `proposer ${proposer} vs verifier ${verifier}`;
 }
 
 export function progressLine(
@@ -147,10 +178,18 @@ export async function runCli(
         },
       });
   const modelRuntime = await ModelRuntime.create();
-  const model = modelRuntime.getModel(options.providerId, options.modelId);
-  if (model === undefined) {
-    throw new Error(`unknown model: ${options.providerId}/${options.modelId}`);
-  }
+  const resolveModel = (choice: ModelChoice) => {
+    const model = modelRuntime.getModel(choice.providerId, choice.modelId);
+    if (model === undefined) {
+      throw new Error(`unknown model: ${choice.providerId}/${choice.modelId}`);
+    }
+    return model;
+  };
+  const models = {
+    proposer: resolveModel(options.models.proposer),
+    verifier: resolveModel(options.models.verifier),
+  };
+  const label = modelLabel(options.models);
 
   const runsDirectory = join(cwd, "runs");
   await mkdir(runsDirectory, { recursive: true });
@@ -158,7 +197,7 @@ export async function runCli(
   const agents = await createPiDebateAgents({
     cwd,
     runDirectory,
-    model,
+    models,
     thinkingLevel: options.thinkingLevel,
     contextPaths,
     modelRuntime,
@@ -189,7 +228,7 @@ export async function runCli(
 
   console.log([
     `[${new Date().toISOString()}] debate started`,
-    `${options.providerId}/${options.modelId}`,
+    label,
     options.thinkingLevel,
     `${String(contextPaths.length)} context sources`,
     `web search ${webSearchTool === undefined ? "disabled" : "enabled"}`,
@@ -197,7 +236,7 @@ export async function runCli(
   ].join(" | "));
   telegram?.startRun({
     topic: options.topic,
-    model: `${options.providerId}/${options.modelId}`,
+    model: label,
     maxDurationMs: options.maxDurationMs,
   });
   process.once("SIGINT", interrupt);
@@ -243,7 +282,7 @@ if (import.meta.main) {
   } catch (error) {
     console.error(`debate3 failed: ${errorMessage(error)}`);
     console.error(
-      "Usage: bun run debate [--max-minutes N] [--model provider/model] [--thinking LEVEL] [--context PATH]... <topic>",
+      "Usage: bun run debate [--max-minutes N] [--model provider/model] [--proposer-model provider/model] [--verifier-model provider/model] [--thinking LEVEL] [--context PATH]... <topic>",
     );
     process.exitCode = 1;
   }
