@@ -115,6 +115,30 @@ describe("LiveFeedDebate", () => {
     expect(result.reason).toBe("host_shutdown");
   });
 
+  test("reaches consensus when agreeing participants stream over each other", async () => {
+    const runDirectory = await temporaryRunDirectory();
+    const agreeing = () => new FakeAgent(async (_prompt, onText) => {
+      onText("No material issue remains.");
+      await Bun.sleep(15);
+      onText("\n\nV3_STATUS: DONE");
+    });
+    const proposer = agreeing();
+    const verifier = agreeing();
+    const debate = new LiveFeedDebate({
+      runDirectory,
+      topic: "Design a cache.",
+      proposer,
+      verifier,
+      pollIntervalMs: 2,
+      maxDurationMs: 1_000,
+    });
+
+    const result = await debate.run();
+
+    expect(result.reason).toBe("consensus");
+    expect(proposer.prompts.length + verifier.prompts.length).toBeLessThanOrEqual(3);
+  });
+
   test("stops when both latest completed messages declare done", async () => {
     const runDirectory = await temporaryRunDirectory();
     const proposer = new FakeAgent((_prompt, onText) => {

@@ -247,6 +247,7 @@ export async function runCli(
       result.reason,
       formatSeconds(result.elapsedMs),
       result.runDirectory,
+      ...(result.failure === undefined ? [] : [result.failure]),
     ].join(" | "));
     return result;
   } finally {

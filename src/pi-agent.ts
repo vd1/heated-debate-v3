@@ -49,6 +49,12 @@ export class PiDebateAgent implements DebateAgent {
     } finally {
       unsubscribe();
     }
+    // Pi resolves the prompt even when the provider call fails; surface the
+    // error so the debate stops instead of re-prompting a failing participant.
+    const last = this.session.messages.at(-1);
+    if (last?.role === "assistant" && last.stopReason === "error") {
+      throw new Error(last.errorMessage ?? "provider call failed");
+    }
   }
 
   abort(): Promise<void> {

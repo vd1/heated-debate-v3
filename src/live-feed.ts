@@ -248,6 +248,13 @@ export class LiveFeedDebate {
 
   private async wakeForPeerGrowth(state: ParticipantState): Promise<void> {
     if (state.busy || this.terminationReason !== undefined) return;
+    // A participant that is done waits for the peer's complete answer and is
+    // prompted again only if that answer does not also end in DONE.
+    // Otherwise two agreeing participants keep waking each other while
+    // streaming confirmations and are never idle together.
+    const peer = state.name === "proposer" ? this.verifier : this.proposer;
+    if (state.latestStatus === "DONE"
+      && (peer.busy || peer.latestStatus === "DONE")) return;
     const currentBytes = await fileSize(state.peerFeedPath);
     if (currentBytes <= state.peerBytesAtLastPrompt) return;
     await this.launch(state, [

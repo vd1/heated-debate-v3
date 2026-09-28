@@ -1,6 +1,43 @@
 import { describe, expect, test } from "bun:test";
 
-import { participantProtocolPrompt } from "../src/pi-agent";
+import type { AgentSession } from "@earendil-works/pi-coding-agent";
+
+import { PiDebateAgent, participantProtocolPrompt } from "../src/pi-agent";
+
+function sessionEndingWith(message: Record<string, unknown>): AgentSession {
+  return {
+    messages: [message],
+    subscribe: () => () => undefined,
+    prompt: () => Promise.resolve(),
+  } as unknown as AgentSession;
+}
+
+describe("PiDebateAgent", () => {
+  test("rejects when the provider call ends in an error", async () => {
+    const agent = new PiDebateAgent(sessionEndingWith({
+      role: "assistant",
+      content: [],
+      stopReason: "error",
+      errorMessage: "OAuth refresh failed for anthropic",
+    }));
+
+    const error = await agent.prompt("Respond.", () => undefined)
+      .then(() => undefined, (reason: unknown) => reason);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe("OAuth refresh failed for anthropic");
+  });
+
+  test("resolves for completed and aborted responses", async () => {
+    for (const stopReason of ["stop", "aborted"]) {
+      const agent = new PiDebateAgent(sessionEndingWith({
+        role: "assistant",
+        content: [],
+        stopReason,
+      }));
+      await agent.prompt("Respond.", () => undefined);
+    }
+  });
+});
 
 describe("participantProtocolPrompt", () => {
   test("gives each participant its role, peer feed, and completion markers", () => {
